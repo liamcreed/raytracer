@@ -214,7 +214,7 @@ int main(int argc, char const* argv[])
         .height = 1080,
         .aspect = 1440.0 / 1080.0
     };
-    FILE* file = fopen("image.ppm", "wt");
+    FILE* file = fopen("images/image.ppm", "wt");
     fprintf(file, "P6\n%d %d\n255\n", image.width, image.height);
 
     scene_t scene =
