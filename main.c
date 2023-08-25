@@ -80,7 +80,20 @@ vec3 vec3_clamp(vec3 v1, vec3 min, vec3 max)
         r.z = min.z;
     return r;
 }
-
+vec3 vec3_reflect(vec3 v1, vec3 n)
+{
+    return vec3_subtract(v1, vec3_multiply_f64(n, 2 * vec3_dot(v1, n)));
+}
+/* void Refract(
+  VEC3 &out, const VEC3 &incidentVec, const VEC3 &normal, float eta)
+{
+  float N_dot_I = Dot(normal, incidentVec);
+  float k = 1.f - eta * eta * (1.f - N_dot_I * N_dot_I);
+  if (k < 0.f)
+    out = VEC3(0.f, 0.f, 0.f);
+  else
+    out = eta * incidentVec - (eta * N_dot_I + sqrtf(k)) * normal;
+} */
 f64 f64_max(f64 f1, f64 f2)
 {
     if (f1 > f2)
@@ -96,6 +109,7 @@ typedef struct
     f64 radius;
     vec3 albedo;
     f64 roughness;
+    bool reflective;
 }sphere_t;
 
 typedef struct
@@ -103,6 +117,7 @@ typedef struct
     vec3 location;
     f64 focal_length;
 }camera_t;
+
 
 
 #define MAX_SPHERE_COUNT 32
@@ -144,8 +159,14 @@ f64 ray_hit_sphere(ray_t* ray, sphere_t* sphere)
     return t;
 }
 
-vec3 ray_get_color(ray_t* ray, scene_t* scene)
+
+vec3 ray_get_color(ray_t* ray, scene_t* scene, i32 ray_count)
 {
+    if(ray_count <= 0)
+    {
+        return (vec3){1,1,1};
+    }
+
     f64 closest_t = INFINITY;
     sphere_t* closest_sphere = NULL;
     for (i32 i = 0; i < scene->sphere_count; i++)
@@ -159,36 +180,68 @@ vec3 ray_get_color(ray_t* ray, scene_t* scene)
     }
 
     vec3 color = {};
-    if (closest_sphere != NULL && closest_t > 1e-4)
+    if (closest_sphere != NULL && closest_t > 1e-7)
     {
         vec3 hit_pos = vec3_add(ray->origin, vec3_multiply_f64(ray->direction, closest_t));
         vec3 normal = vec3_normalize(vec3_subtract(hit_pos, closest_sphere->location));
-        
-        f32 diffuse = f64_max(vec3_dot(normal, (vec3){1,1,1}), 0.0);
-        color = vec3_multiply_f64(closest_sphere->albedo, diffuse);
+        vec3 light_dir = vec3_normalize((vec3) { -1, -1, -1 });
 
         ray_t shadow_ray =
         {
             .origin = hit_pos,
-            .direction = {1,1,0}
+            .direction = vec3_multiply_f64(light_dir, -1)
         };
         bool in_shadow = false;
         for (i32 i = 0; i < scene->sphere_count; i++)
         {
             f64 t = ray_hit_sphere(&shadow_ray, &scene->spheres[i]);
-            if(t != INFINITY && t > 1e-4)
+            if (t != INFINITY && t > 1e-7) // -1e-7 for self shadows
                 in_shadow = true;
         }
-        if(in_shadow)
-            return (vec3){0,0,0};
+
+        f64 ambient_factor = 0.1;
+        vec3 ambient = vec3_multiply_f64(closest_sphere->albedo, ambient_factor);
+
+        if (in_shadow)
+            return ambient;
         else
+        {
+            color = closest_sphere->albedo;
+
+            if (closest_sphere->reflective)
+            {
+                ray_t reflection_ray =
+                {
+                    .origin = hit_pos,
+                    .direction = vec3_reflect(vec3_normalize(ray->direction), normal)
+                };
+                
+                color = vec3_multiply(ray_get_color(&reflection_ray, scene, ray_count - 1), color);
+            }
+            else
+            {
+                color = closest_sphere->albedo;
+                f64 diffuse = f64_max(vec3_dot(normal, vec3_multiply_f64(light_dir, -1)), 0.0);
+
+                color = vec3_multiply_f64(color, diffuse * (1.0 - ambient_factor));
+                color = vec3_add(color, ambient);
+
+                vec3 view_dir = vec3_normalize(vec3_subtract(ray->origin, hit_pos));
+                vec3 reflecion = vec3_reflect(light_dir, normal);
+                float spec = pow(f64_max(vec3_dot(view_dir, reflecion), 0.0), 64);
+                vec3 specular = vec3_multiply_f64((vec3) { .5, .5, .5 }, spec);
+                color = vec3_add(color, specular);
+            }
+
+
+
             return color;
-        
+        }
     }
     else
     {
         f64 a = ray->direction.y * 0.5 + 0.5;
-        color = (vec3){ (1.0 - a) + 0.5,a + 0.4,1.0 };
+        color = (vec3){ (1.0 - a) + 0.4, (1.0 - a) + 0.4 ,1.0 };
     }
     return color;
 }
@@ -222,16 +275,14 @@ int main(int argc, char const* argv[])
         .camera =
         {
             .focal_length = 3.0,
-            .location = {0,0,9.0}
+            .location = {0,1,9.0}
         }
     };
 
-    sphere_t sphere = { .albedo = {1.0,0.0,1.0}, .location = {-1.0,0.0,0.0}, .radius = 0.5 };
-    sphere_t sphere2 = { .albedo = {0.0,1.0,1.0}, .location = {1.0,0.0,4.0}, .radius = 0.5 };
-    sphere_t plane = { .albedo = {0.1,0.3,1.0}, .location = {0.0,-1000.5,0.0}, .radius = 1000.0 };
-    scene_add_sphere(&scene, sphere);
-    scene_add_sphere(&scene, sphere2);
-    scene_add_sphere(&scene, plane);
+    scene_add_sphere(&scene, (sphere_t){ .albedo = {1.0,0.0,1.0}, .location = {-1.0,0.0,1.0}, .radius = 0.5 });
+    scene_add_sphere(&scene, (sphere_t){ .albedo = {1.0,1.0,1.0}, .location = {1.0,1.5,0.0}, .radius = 1.4, .reflective = true });
+    scene_add_sphere(&scene, (sphere_t){ .albedo = {0.3,1.0,0.6}, .location = {2.0,0.0,2.5}, .radius = 0.5,.reflective = true });
+    scene_add_sphere(&scene, (sphere_t){ .albedo = {0.1,0.3,1.0}, .location = {0.0,-1000.5,0.0}, .radius = 1000.0 }); // plane
 
     clock_t begin_clock = clock();
     for (i32 y = 0; y < image.height; y++)
@@ -241,13 +292,14 @@ int main(int argc, char const* argv[])
             ray_t ray =
             {
                 .origin = scene.camera.location,
-                .direction = {
+                .direction =
+                {
                     (((f64)x / (f64)image.width) * 2 - 1) * image.aspect,
                     -(((f64)y / (f64)image.height) * 2 - 1),
                     -scene.camera.focal_length}
             };
 
-            vec3 color = vec3_clamp(ray_get_color(&ray, &scene), (vec3) { 0, 0, 0 }, (vec3) { 1.0, 1.0, 1.0 });
+            vec3 color = vec3_clamp(ray_get_color(&ray, &scene, 5), (vec3) { 0, 0, 0 }, (vec3) { 1.0, 1.0, 1.0 });
 
             u8 rgb[3] = { pow(color.x,1 / GAMMA) * 255, pow(color.y,1 / GAMMA) * 255, pow(color.z,1 / GAMMA) * 255 };
             fwrite(rgb, 1, 3, file);
