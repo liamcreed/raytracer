@@ -7,6 +7,12 @@ typedef struct
     f64 z;
 }vec3;
 
+typedef struct
+{
+    f64 x;
+    f64 y;
+}vec2;
+
 vec3 vec3_multiply(vec3 v1, vec3 v2)
 {
     return (vec3) { v1.x* v2.x, v1.y* v2.y, v1.z* v2.z };
@@ -67,13 +73,11 @@ vec3 vec3_reflect(vec3 v1, vec3 n)
 {
     return vec3_subtract(v1, vec3_multiply_f64(n, 2 * vec3_dot(v1, n)));
 }
-/* void Refract(
-  VEC3 &out, const VEC3 &incidentVec, const VEC3 &normal, float eta)
+vec3 vec3_refract(vec3 v, vec3 n, f64 i)
 {
-  float N_dot_I = Dot(normal, incidentVec);
-  float k = 1.f - eta * eta * (1.f - N_dot_I * N_dot_I);
-  if (k < 0.f)
-    out = VEC3(0.f, 0.f, 0.f);
-  else
-    out = eta * incidentVec - (eta * N_dot_I + sqrtf(k)) * normal;
-} */
+    f64 cos_theta = fmin(vec3_dot(vec3_multiply_f64(v, -1), n), 1.0);
+    vec3 r_out_perp = vec3_multiply_f64(vec3_add(v, vec3_multiply_f64(n, cos_theta)), i);
+   
+    vec3 r_out_parallel = vec3_multiply_f64(n, -sqrt(fabs(1.0 - vec3_length_2(r_out_perp))));
+    return vec3_add(r_out_perp, r_out_parallel);
+}
