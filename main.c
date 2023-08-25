@@ -94,12 +94,7 @@ vec3 vec3_reflect(vec3 v1, vec3 n)
   else
     out = eta * incidentVec - (eta * N_dot_I + sqrtf(k)) * normal;
 } */
-f64 f64_max(f64 f1, f64 f2)
-{
-    if (f1 > f2)
-        return f1;
-    return f2;
-}
+
 
 //--------------------------------//
 
@@ -108,7 +103,7 @@ typedef struct
     vec3 location;
     f64 radius;
     vec3 albedo;
-    f64 roughness;
+    f64 specular;
     bool reflective;
 }sphere_t;
 
@@ -162,9 +157,9 @@ f64 ray_hit_sphere(ray_t* ray, sphere_t* sphere)
 
 vec3 ray_get_color(ray_t* ray, scene_t* scene, i32 ray_count)
 {
-    if(ray_count <= 0)
+    if (ray_count <= 0)
     {
-        return (vec3){1,1,1};
+        return (vec3) { 1, 1, 1 };
     }
 
     f64 closest_t = INFINITY;
@@ -199,7 +194,7 @@ vec3 ray_get_color(ray_t* ray, scene_t* scene, i32 ray_count)
                 in_shadow = true;
         }
 
-        f64 ambient_factor = 0.1;
+        f64 ambient_factor = 0.3;
         vec3 ambient = vec3_multiply_f64(closest_sphere->albedo, ambient_factor);
 
         if (in_shadow)
@@ -215,25 +210,28 @@ vec3 ray_get_color(ray_t* ray, scene_t* scene, i32 ray_count)
                     .origin = hit_pos,
                     .direction = vec3_reflect(vec3_normalize(ray->direction), normal)
                 };
-                
+
                 color = vec3_multiply(ray_get_color(&reflection_ray, scene, ray_count - 1), color);
+                vec3 view_dir = vec3_normalize(vec3_subtract(ray->origin, hit_pos));
+                vec3 reflecion = vec3_reflect(light_dir, normal);
+                float spec = pow(fmax(vec3_dot(view_dir, reflecion), 0.0), 256);
+                vec3 specular = vec3_multiply_f64((vec3) { .5, .5, .5 }, spec);
+                color = vec3_add(color, specular);
             }
             else
             {
                 color = closest_sphere->albedo;
-                f64 diffuse = f64_max(vec3_dot(normal, vec3_multiply_f64(light_dir, -1)), 0.0);
+                f64 diffuse = fmax(vec3_dot(normal, vec3_multiply_f64(light_dir, -1)), 0.0);
 
                 color = vec3_multiply_f64(color, diffuse * (1.0 - ambient_factor));
                 color = vec3_add(color, ambient);
 
                 vec3 view_dir = vec3_normalize(vec3_subtract(ray->origin, hit_pos));
                 vec3 reflecion = vec3_reflect(light_dir, normal);
-                float spec = pow(f64_max(vec3_dot(view_dir, reflecion), 0.0), 64);
+                float spec = pow(fmax(vec3_dot(view_dir, reflecion), 0.0), 128 * closest_sphere->specular) * closest_sphere->specular;
                 vec3 specular = vec3_multiply_f64((vec3) { .5, .5, .5 }, spec);
                 color = vec3_add(color, specular);
             }
-
-
 
             return color;
         }
@@ -263,8 +261,8 @@ int main(int argc, char const* argv[])
 
     image_t image =
     {
-        .width = 1440,
-        .height = 1080,
+        .width = 1440 * 2.0,
+        .height = 1080 * 2.0,
         .aspect = 1440.0 / 1080.0
     };
     FILE* file = fopen("images/image.ppm", "wt");
@@ -279,10 +277,10 @@ int main(int argc, char const* argv[])
         }
     };
 
-    scene_add_sphere(&scene, (sphere_t){ .albedo = {1.0,0.0,1.0}, .location = {-1.0,0.0,1.0}, .radius = 0.5 });
-    scene_add_sphere(&scene, (sphere_t){ .albedo = {1.0,1.0,1.0}, .location = {1.0,1.5,0.0}, .radius = 1.4, .reflective = true });
-    scene_add_sphere(&scene, (sphere_t){ .albedo = {0.3,1.0,0.6}, .location = {2.0,0.0,2.5}, .radius = 0.5,.reflective = true });
-    scene_add_sphere(&scene, (sphere_t){ .albedo = {0.1,0.3,1.0}, .location = {0.0,-1000.5,0.0}, .radius = 1000.0 }); // plane
+    scene_add_sphere(&scene, (sphere_t) { .albedo = { 1.0,0.0,1.0 }, .location = { -1.0,0.0,1.0 }, .radius = 0.5, .specular = 1.0 });
+    scene_add_sphere(&scene, (sphere_t) { .albedo = { 1.0,1.0,1.0 }, .location = { 1.0,1.5,0.0 }, .radius = 1.4, .reflective = true });
+    scene_add_sphere(&scene, (sphere_t) { .albedo = { 0.3,1.0,0.6 }, .location = { 2.0,0.0,2.5 }, .radius = 0.5, .reflective = true });
+    scene_add_sphere(&scene, (sphere_t) { .albedo = { 0.1,0.1,0.1 }, .location = { 0.0,-1000.5,0.0 }, .radius = 1000.0, .specular = 0.0 }); // plane
 
     clock_t begin_clock = clock();
     for (i32 y = 0; y < image.height; y++)
