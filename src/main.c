@@ -148,7 +148,10 @@ vec3 ray_get_color(ray_t* ray, scene_t* scene, i32 ray_count)
         {
             intersection = i;
         }
-    } 
+    }
+    intersection_t triangle_intersection = ray_hit_triangle(ray, &triangle);
+    if (triangle_intersection.intersection && triangle_intersection.t < intersection.t)
+        intersection = triangle_intersection;
 
     vec3 color = {};
     if (intersection.intersection)
@@ -232,7 +235,7 @@ int main(int argc, char const* argv[])
 
     image_t image =
     {
-        .width = 1440 ,
+        .width = 1440,
         .height = 1080 ,
         .aspect = 1440.0 / 1080.0
     };
@@ -258,8 +261,17 @@ int main(int argc, char const* argv[])
     scene_add_sphere(&scene, (sphere_t) { .material = &material4, .location = { 0.0,-1000.5,0.0 }, .radius = 1000.0 }); // plane
 
     clock_t begin_clock = clock();
+    i32 i = 0;
     for (i32 y = 0; y < image.height; y++)
     {
+        i += 1;
+        if (i > 100)
+        {
+            printf("\rprogress %.2f", (f64)(y) / (f64)(image.height));
+            fflush(stdout);
+            i = 0;
+        }
+
         for (i32 x = 0; x < image.width; x++)
         {
             ray_t ray =
