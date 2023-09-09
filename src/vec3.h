@@ -69,6 +69,15 @@ vec3 vec3_clamp(vec3 v1, vec3 min, vec3 max)
         r.z = min.z;
     return r;
 }
+vec3 vec3_cross(vec3 v1, vec3 v2)
+{
+    return (vec3) {
+        v1.y* v2.z - v1.z * v2.y,
+            v1.z* v2.x - v1.x * v2.z,
+            v1.x* v2.y - v1.y * v2.x
+    };
+}
+
 vec3 vec3_reflect(vec3 v1, vec3 n)
 {
     return vec3_subtract(v1, vec3_multiply_f64(n, 2 * vec3_dot(v1, n)));
@@ -77,7 +86,7 @@ vec3 vec3_refract(vec3 v, vec3 n, f64 i)
 {
     f64 cos_theta = fmin(vec3_dot(vec3_multiply_f64(v, -1), n), 1.0);
     vec3 r_out_perp = vec3_multiply_f64(vec3_add(v, vec3_multiply_f64(n, cos_theta)), i);
-   
+
     vec3 r_out_parallel = vec3_multiply_f64(n, -sqrt(fabs(1.0 - vec3_length_2(r_out_perp))));
     return vec3_add(r_out_perp, r_out_parallel);
 }

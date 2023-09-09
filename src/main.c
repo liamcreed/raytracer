@@ -6,6 +6,7 @@
 #include <time.h>
 #include <assert.h>
 
+
 typedef float f32;
 typedef double f64;
 typedef uint8_t u8;
@@ -18,7 +19,6 @@ typedef int32_t i32;
 typedef int64_t i64;
 
 #include "vec3.h"
-
 
 //---------------------------//
 
@@ -117,13 +117,24 @@ typedef struct
 typedef struct
 {
     vertex_t vertices[3];
+    material_t* material;
 }triangle_t;
 
 
 intersection_t ray_hit_triangle(ray_t* ray, triangle_t* triangle)
 {
     intersection_t result;
-    result.t = INFINITY;
+    result.t = 0;
+    
+    if (result.t > 1e-7 && result.t != INFINITY)
+    {
+        result.location = vec3_add(ray->origin, vec3_multiply_f64(ray->direction, result.t));
+        result.normal = vec3_normalize(result.location);
+        result.material = triangle->material;
+        result.intersection = true;
+    }
+    else
+        result.intersection = false;
     return result;
 }
 
@@ -131,7 +142,7 @@ triangle_t triangle =
 {
     .vertices[0] = {{0.5,1.0,0.0},{},{}},
     .vertices[1] = {{1.0, -1.0, 0.0},{},{}},
-    .vertices[2] = {{-1.0,-1.0, 0.0},{},{}}
+    .vertices[2] = {{-1.0,-1.0, 0.0},{},{}},
 };
 
 vec3 ray_get_color(ray_t* ray, scene_t* scene, i32 ray_count)
@@ -149,9 +160,14 @@ vec3 ray_get_color(ray_t* ray, scene_t* scene, i32 ray_count)
             intersection = i;
         }
     }
+
+    material_t triangle_mat = {.albedo = {1.0,0.0,0.0}};
+    triangle.material = &triangle_mat;
     intersection_t triangle_intersection = ray_hit_triangle(ray, &triangle);
+
     if (triangle_intersection.intersection && triangle_intersection.t < intersection.t)
         intersection = triangle_intersection;
+        
 
     vec3 color = {};
     if (intersection.intersection)
@@ -265,7 +281,7 @@ int main(int argc, char const* argv[])
     for (i32 y = 0; y < image.height; y++)
     {
         i += 1;
-        if (i > 100)
+        if (i > image.width/100.0)
         {
             printf("\rprogress %.2f", (f64)(y) / (f64)(image.height));
             fflush(stdout);
